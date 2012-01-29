@@ -1,0 +1,15 @@
+as_root is a perl script which help you if in your departament don't want to
+use sudo.
+
+It basically use expect to automatically login as root in server though ssh:
+
+ssh machine "su -"
+password: xxxx
+# 
+
+In this moment as_root recognize only xml keepass v1 format. xml example in
+this source is from keepass v2, in my next commit I will make it compatible.
+
+I'm playing with git, so I expect to have errors ...
+
+Well, to be improved !
