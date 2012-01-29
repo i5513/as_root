@@ -1,0 +1,321 @@
+#!/usr/bin/perl 
+use strict;
+use warnings;
+use utf8;
+use Expect;
+use File::Basename;
+use Getopt::Long;
+use POSIX qw(strftime);
+
+my $decrypt;
+my $password_file;
+my $logfile="/var/log/as_root.log";
+if ( -e "$ENV{HOME}/.as_root/password.xml")
+{
+	$password_file="$ENV{HOME}/.as_root/password.xml";
+}
+else
+{
+	$password_file="/etc/as_root/passwords.xml";
+}
+my $default_password="password";
+my $comando_script=0;
+
+sub mi_getlogin
+{
+	my $id=`id`;
+	if ($id =~ /^uid=(\d+)\(([^\)]*)\)/)
+	{
+		return $2 if defined ($2);
+		return $1 if defined ($1);
+	}
+	return "MAL";
+}
+
+sub obtener_password
+{
+        my $password;
+        my $host=shift;
+	my $noborrar=0;
+	my $root=shift;
+
+        my $password_file_desencriptado="/tmp/passwords-inseguro.".$root.".xml";
+	if ( not -e $password_file_desencriptado)
+	{
+		if ( not -e $password_file )
+		{
+			die "No puedo abrir $password_file";
+		}
+		if ( not defined $decrypt )
+		{
+			my $desencriptado=system ("openssl des3 -salt -d -in $password_file -out $password_file_desencriptado 2> /dev/null");
+			if ( $? ne 0)
+			{
+				system ("rm -f $password_file_desencriptado");
+				die "No hemos podido desencriptar el fichero. Salimos";
+			}
+		}
+		else
+		{
+			$password_file_desencriptado=$password_file;
+		}
+	}
+	else
+	{
+		$noborrar=1;
+	}
+
+        $password_file=$password_file_desencriptado;
+
+        open PASS, $password_file ;
+        while (<PASS>)
+        {
+                if (/>$host</i)
+                {
+                        my $user=<PASS>;
+                        if ($user =~ />root</)
+                        {
+                                $password=<PASS>;
+                                $password=~s/.*<password>//; $password=~s/<\/pass.*$//;
+                        }
+                        else
+                        {
+                                my $devnull=<PASS>;
+                        }
+                }
+        }
+       # printf "Encontrado $password\n" if (defined $password) ;
+        close PASS;
+        if (not defined ($password))
+        {
+                $password=$default_password;
+                # die "Falta password. No encontrado en $password_file";
+        }
+        if ( not defined $decrypt and $noborrar ne 1 )
+        {
+                system ("rm -f $password_file_desencriptado");
+                if ($? ne 0)
+                {
+                        die "No he podido eliminar el fichero de password $password_file_desencriptado.";
+                }
+        }
+        return $password;
+}
+
+sub linux_o_solaris 
+{
+	my $host=shift;
+	my $root=shift;
+	my $res=0;
+	my $linux=0;
+	my $solaris=0;
+	
+	$res=system("ssh -l $root $host '
+	if ! [ -d /usr/local/bin ]; 
+	then 
+		echo FALLO NO existe /usr/local/bin >&2; 
+		exit 4;
+	fi
+	if uname -a | grep -i linux &> /dev/null
+	then
+		mkdir as_root 2> /dev/null
+		exit 2;
+	fi
+	if uname -a | grep -i SunOS &> /dev/null
+	then
+		mkdir as_root 2> /dev/null
+		exit 3;
+	fi
+	'");
+	# estos numeros los he tenido que mirar a mano ... no se como ira en el mismo linux
+
+	$res=$res >> 8;	
+	if ($res eq 4)
+	{
+		die "No existe /usr/local/bin en $host !!";
+	}
+	if ($res eq 3)
+	{
+		return "solaris";
+	}
+	elsif ($res eq 2)
+	{
+		return "linux";
+	}
+	else
+	{
+		die "Sin reconocer sistema operativo (o no hemos podido entrar), salimos\n";
+	}
+}
+
+sub as_root
+{
+	my $host=shift;
+	my $root=shift;
+	my $password=shift;
+	my $comando=shift;
+	my $su;
+	my $pass=0;
+	my $so=linux_o_solaris($host,$root);
+	my $cmd;
+
+	my $fecha=strftime "%Y%m%d - %H:%M:%S", localtime;
+	open LOG, ">>$logfile";
+	print LOG "$fecha - as_root $host, $root, \"$comando\" LANZANDO\n";
+	close LOG;
+	# $fichero_script es una variable global
+	if ( $comando_script eq 1 )
+	{
+		my $script=basename($comando);
+		my $res=system("scp -q $comando $root\@$host:as_root/$script");
+		# $res ne 0 ...
+		if ($res eq 256)
+		{
+			die "No pudo copiar $comando a $root\@$host:as_root/$script";
+		}
+		if ($so eq "solaris")
+		{
+			$cmd = <<"EOC";
+su - root -c \\\"
+mv /export/home/$root/as_root/$script /usr/local/bin/
+chmod +x /usr/local/bin/$script 
+/usr/local/bin/$script \\\"
+EOC
+		}
+		elsif ($so eq "linux")
+		{
+			$cmd = <<"EOC";
+su -c 'mv /home/$root/as_root/$script /usr/local/bin
+chmod +x /usr/local/bin/$script
+/usr/local/bin/$script
+rm -f /usr/local/bin/$script' - root
+EOC
+		}
+	}
+	elsif ( $comando =~ /./)
+	{
+		if ($so eq "linux")
+		{
+			$cmd = <<"EOC";
+su -c ' 
+$comando
+' - root
+EOC
+		}
+		elsif ($so eq "solaris")
+		{
+			$cmd = <<"EOC";
+su - root -c \\\"
+$comando
+\\\"
+EOC
+		}
+	}
+	else
+	{
+		$cmd = <<"EOC";
+su - root
+EOC
+	}
+	$su=new Expect;
+	if ( -t STDIN )
+	{
+		$su->slave->clone_winsize_from(\*STDIN);
+	}
+	$su->spawn ("ssh -q  -t $root\@$host \"$cmd\"") or 
+		die "No puedo ejecutar el comando";
+#	$SIG{WINCH} = \&winch;
+  
+#	sub winch {
+#    	$su->slave->clone_winsize_from(\*STDIN);
+#   	 kill WINCH => $su->pid if $su->pid;
+#    	$SIG{WINCH} = \&winch;
+#  	}
+
+
+	$su->log_user(0);
+	# $su->log_file ("/tmp/as_root");
+	# $su->expect (undef);
+	if ($so eq "linux")
+	{
+		# "Contraseña:" vs "Password: " ...
+		$su->expect (10,
+		[ qr/Passw.*/ => sub { my $exp=shift;
+			$exp->send("$password"."\n");
+			exp_continue;
+			}]  ,
+		[ qr/Contr.*/ => sub { my $exp=shift;
+			$exp->send("$password"."\n");
+			$exp->log_user(1);
+			exp_continue;
+			}],
+		[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1); } ] 
+		);
+	}
+	elsif ($so eq "solaris")
+	{
+		$su->expect (10,
+		[ qr/Contr.*|Passw.*/ => sub { my $exp=shift;
+			$exp->send("$password"."\n");
+			$pass=1;
+			exp_continue;
+			}]  ,
+		[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1) if ($pass == 1); } ] 
+	#	[ qr/SunOS/ => sub { my $exp=shift; $exp->log_user(1); } ] 
+		);
+	}
+	if ($comando =~ /^$/)
+	{
+		$su->interact();
+	}
+	$su->soft_close();
+	$fecha=strftime "%Y%d%m - %H:%M:%S", localtime;
+	open LOG, ">>$logfile";
+	print LOG "$fecha - as_root $host, $root, \"$comando\" EJECUTADO\n";
+	close LOG;
+}
+
+
+Getopt::Long::Configure ("bundling");
+
+my $fichero_script=undef;
+my $root=mi_getlogin();
+my $result = GetOptions (
+        "file|f=s" => \$fichero_script,
+        "passwordfile|p=s" => \$password_file,
+	"user|u=s" => \$root,
+	"decrypted|d" => \$decrypt
+        );
+my $comando;
+
+if ( $#ARGV lt 0 )
+{
+	die "Falta host";
+}
+
+my $host= $ARGV[0];
+my $password=obtener_password($host,$root);
+
+# Para los sistemas que necesitan saltos, usamos ssh
+# my $nc=system ("nc -z -w 2 $host 22 &> /dev/null");
+my $nc=system ("ssh -l $root $host true &> /dev/null");
+if ($nc ne 0)
+{
+	die "\"$host\" no responde al puerto 22\n";
+}
+
+if (defined $fichero_script)
+{
+	$comando=$fichero_script;
+	$comando_script=1;
+}
+elsif (defined $ARGV[1])
+{
+	$comando="$ARGV[1]";
+}
+else
+{
+	$comando="";
+}
+
+as_root ($host, $root, $password, $comando);
