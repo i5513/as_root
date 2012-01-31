@@ -9,20 +9,9 @@ use POSIX qw(strftime);
 use Data::Dumper;
 use XML::LibXML;
 
-my $decrypt;
-my $password_file;
-my $logfile="/var/log/as_root.log";
-printf "$ENV{HOME}/.as_root/password.xml\n";
-if ( -e "$ENV{HOME}/.as_root/passwords.xml")
-{
-	$password_file="$ENV{HOME}/.as_root/passwords.xml";
-}
-else
-{
-	$password_file="/etc/as_root/passwords.xml";
-}
-my $default_password="password";
-my $comando_script=0;
+my @directives=qw(log_file passwords_file default_password decrypt user);
+my %directives;
+$directives{$_}=1 foreach @directives;
 
 sub mi_getlogin
 {
@@ -32,65 +21,133 @@ sub mi_getlogin
 		return $2 if defined ($2);
 		return $1 if defined ($1);
 	}
-	return "MAL";
+	return "WRONG";
 }
+sub read_config
+{
+	my ($options)=@_;
+	my %config=(log_file => "/var/log/as_root.log", 
+		passwords_file => "/etc/as_root/passwords.xml",
+		user => mi_getlogin,
+		decrypt=>0
+		);
+	my $file_config=$options->{file_config};
+
+	if (not defined $file_config)
+	{
+		if (-e "$ENV{HOME}/.as_root/config")
+		{
+			$file_config="$ENV{HOME}/.as_root/config";
+		}
+		elsif (-e "/etc/as_root/config")
+		{
+			$file_config="/etc/as_root/config";	
+		}
+	}
+
+	# Let's not use any Config:: module ...
+	if (-e "$file_config")
+	{
+		open my $f , "$file_config";
+		while (<$f>)
+		{
+			next if (/^#/);
+			if (/([^=]*)=(.*)\s*$/)
+			{
+				my $directive=$1;
+				my $value=$2;
+
+				if (not defined ($directives{$directive}))
+				{
+					die "$directive is not a valid directive";
+				}
+				$config{$directive}=$value;
+			}
+		}
+	}
+	# Command line options ..
+	if (defined $options->{passwords_file})
+	{
+		$config{passwords_file}=$options->{passwords_file};
+	}
+	if (defined $options->{root})
+	{
+		$config{user}=$options->{root};
+	}
+	if (defined $options->{decrypt})
+	{
+		$config{decrypt}=$options->{decrypt};
+	}
+	return %config;
+}
+
+
+my $decrypt;
+my $passwords_file;
+my $log_file;
+my $default_password="password";
+my $comando_script=0;
+
 
 sub obtener_password
 {
-        my $password;
-        my $host=shift;
-	my $noborrar=0;
-	my $root=shift;
+    my $password;
+    my ($host,$config)=@_;
+	my $dontdelete=0;
 
-        my $password_file_desencriptado="/tmp/passwords-inseguro.".$root.".xml";
-	if ( not -e $password_file_desencriptado)
+    my $pass_file_decrypt="/tmp/passwords-insecure-$config->{user}.xml";
+	if ( not -e $pass_file_decrypt)
 	{
-		if ( not -e $password_file )
+		if ( not -e $config->{passwords_file} )
 		{
-			die "No puedo abrir $password_file";
+			die "No puedo abrir $config->{passwords_file}";
 		}
-		if ( not defined $decrypt )
+		if ( not defined $config->{decrypt} )
 		{
-			my $desencriptado=system ("openssl des3 -salt -d -in $password_file -out $password_file_desencriptado 2> /dev/null");
+			my $desencriptado=system ("openssl des3 -salt -d ".
+				"-in $config->{passwords_file} ".
+				"-out $pass_file_decrypt ".
+				"2> /dev/null");
 			if ( $? ne 0)
 			{
-				system ("rm -f $password_file_desencriptado");
-				die "No hemos podido desencriptar el fichero. Salimos";
+				system ("rm -f $pass_file_decrypt");
+				die "I can't decrypt the file $config->{passwords_file}.".
+					"Dying...";
 			}
 		}
 		else
 		{
-			$password_file_desencriptado=$password_file;
+			$pass_file_decrypt=$config->{passwords_file};
 		}
 	}
 	else
 	{
-		$noborrar=1;
+		$dontdelete=1;
 	}
 
-        $password_file=$password_file_desencriptado;
+	$config->{passwords_file}=$pass_file_decrypt;
 
-		my $xml = XML::LibXML->load_xml(location => $password_file);
-		my $xc = XML::LibXML::XPathContext->new($xml);
-		$password = $xc -> findvalue
-		("//Group/Entry/String[Key='UserName'][Value='root']".
+	my $xml = XML::LibXML->load_xml(location => $config->{passwords_file});
+	my $xc = XML::LibXML::XPathContext->new($xml);
+	$password = $xc -> findvalue ("//Group/Entry/String".
+		"[Key='UserName'][Value='root']".
 		"/../String[Key='Title'][Value='$host']".
 		"/../String[Key='Password']/Value");
 
-        if (not defined ($password))
-        {
-                $password=$default_password;
-                # die "Falta password. No encontrado en $password_file";
-        }
-        if ( not defined $decrypt and $noborrar ne 1 )
-        {
-                system ("rm -f $password_file_desencriptado");
-                if ($? ne 0)
-                {
-                        die "No he podido eliminar el fichero de password $password_file_desencriptado.";
-                }
-        }
-        return $password;
+	if (not defined ($password))
+	{
+		$password=$default_password;
+		# die "Falta password. No encontrado en $password_file";
+	}
+	if ( not defined $config->{decrypt} and $dontdelete ne 1 )
+	{
+		system ("rm -f $pass_file_decrypt");
+		if ($? ne 0)
+		{
+			die "I can't delete file $pass_file_decrypt. Dying ...";
+		}
+	}
+	return $password;
 }
 
 sub linux_o_solaris 
@@ -145,13 +202,14 @@ sub as_root
 	my $root=shift;
 	my $password=shift;
 	my $comando=shift;
+	my $log_file=shift;
 	my $su;
 	my $pass=0;
 	my $so=linux_o_solaris($host,$root);
 	my $cmd;
 
 	my $fecha=strftime "%Y%m%d - %H:%M:%S", localtime;
-	open LOG, ">>$logfile";
+	open LOG, ">>$log_file";
 	print LOG "$fecha - as_root $host, $root, \"$comando\" LANZANDO\n";
 	close LOG;
 	# $fichero_script es una variable global
@@ -261,7 +319,7 @@ EOC
 	}
 	$su->soft_close();
 	$fecha=strftime "%Y%d%m - %H:%M:%S", localtime;
-	open LOG, ">>$logfile";
+	open LOG, ">>$log_file";
 	print LOG "$fecha - as_root $host, $root, \"$comando\" EJECUTADO\n";
 	close LOG;
 }
@@ -269,15 +327,22 @@ EOC
 
 Getopt::Long::Configure ("bundling");
 
-my $fichero_script=undef;
-my $root=mi_getlogin();
+my $file_config;
+my $fichero_script;
+my $root;
 my $result = GetOptions (
+		"config|c" => \$file_config,
         "file|f=s" => \$fichero_script,
-        "passwordfile|p=s" => \$password_file,
+        "passwordfile|p=s" => \$passwords_file,
 	"user|u=s" => \$root,
 	"decrypted|d" => \$decrypt
         );
 my $comando;
+
+my %config=read_config ( { file_config=>$file_config,
+			passwords_file => $passwords_file,
+			user => $root,
+			decrypt => $decrypt});
 
 if ( $#ARGV lt 0 )
 {
@@ -285,11 +350,11 @@ if ( $#ARGV lt 0 )
 }
 
 my $host= $ARGV[0];
-my $password=obtener_password($host,$root);
+my $password=obtener_password($host,\%config);
 
 # Para los sistemas que necesitan saltos, usamos ssh
 # my $nc=system ("nc -z -w 2 $host 22 &> /dev/null");
-my $nc=system ("ssh -l $root $host true &> /dev/null");
+my $nc=system ("ssh -l $config{user} $host true &> /dev/null");
 if ($nc ne 0)
 {
 	die "\"$host\" no responde al puerto 22\n";
@@ -309,4 +374,5 @@ else
 	$comando="";
 }
 
-as_root ($host, $root, $password, $comando);
+as_root ($host, $config{user}, $password, 
+		$comando,$config{log_file});
