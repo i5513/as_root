@@ -6,13 +6,16 @@ use Expect;
 use File::Basename;
 use Getopt::Long;
 use POSIX qw(strftime);
+use Data::Dumper;
+use XML::LibXML;
 
 my $decrypt;
 my $password_file;
 my $logfile="/var/log/as_root.log";
-if ( -e "$ENV{HOME}/.as_root/password.xml")
+printf "$ENV{HOME}/.as_root/password.xml\n";
+if ( -e "$ENV{HOME}/.as_root/passwords.xml")
 {
-	$password_file="$ENV{HOME}/.as_root/password.xml";
+	$password_file="$ENV{HOME}/.as_root/passwords.xml";
 }
 else
 {
@@ -67,25 +70,13 @@ sub obtener_password
 
         $password_file=$password_file_desencriptado;
 
-        open PASS, $password_file ;
-        while (<PASS>)
-        {
-                if (/>$host</i)
-                {
-                        my $user=<PASS>;
-                        if ($user =~ />root</)
-                        {
-                                $password=<PASS>;
-                                $password=~s/.*<password>//; $password=~s/<\/pass.*$//;
-                        }
-                        else
-                        {
-                                my $devnull=<PASS>;
-                        }
-                }
-        }
-       # printf "Encontrado $password\n" if (defined $password) ;
-        close PASS;
+		my $xml = XML::LibXML->load_xml(location => $password_file);
+		my $xc = XML::LibXML::XPathContext->new($xml);
+		$password = $xc -> findvalue
+		("//Group/Entry/String[Key='UserName'][Value='root']".
+		"/../String[Key='Title'][Value='$host']".
+		"/../String[Key='Password']/Value");
+
         if (not defined ($password))
         {
                 $password=$default_password;
