@@ -7,8 +7,26 @@ ssh machine "su -"
 password: xxxx
 # 
 
-In this moment as_root recognize only xml keepass v1 format. xml example in
-this source is from keepass v2, in my next commit I will make it compatible.
+You need a password file exported to xml from keepass v2. Actually you need
+encrypt it:
+
+openssl des3 -salt -e -in passwords.xml -out passwords-encrypted.xml
+
+or configuring -d (decrypt option) when using as_root.
+
+as_root will read in this order:
+
+-c file_config
+~/.as_root/config
+/etc/as_root/config
+
+Directives supported are:
+
+log_file
+user
+decrypt
+passwords_file
+default_password
 
 I'm playing with git, so I expect to have errors ...
 
