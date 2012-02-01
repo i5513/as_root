@@ -1,0 +1,6 @@
+# Config of as_root
+user=youruser
+passwords_file=/home/youruser/private/passwords.xml
+decrypt=1
+default_password=test
+log_file=/home/youruser/logs/as_root.log
