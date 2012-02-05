@@ -13,6 +13,17 @@ use XML::LibXML;
 my @directives=qw(log_file passwords_file default_password decrypt user);
 my %directives;
 $directives{$_}=1 foreach @directives;
+my %config;
+
+sub info
+{
+	return if $config{log_file} !~ /./;
+	my $msg=shift;
+	my $date=strftime "%Y%m%d - %H:%M:%S", localtime;
+	open LOG, ">>","$config{log_file}";
+	print LOG "$date - $msg";
+	close LOG;
+}
 
 sub get_login
 {
@@ -53,7 +64,7 @@ sub read_config
 		while (<$f>)
 		{
 			next if (/^#/);
-			if (/([^=]*)=(.*)\s*$/)
+			if (/([^=]*)\s*=\s*(.*)\s*$/)
 			{
 				my $directive=$1;
 				my $value=$2;
@@ -78,6 +89,11 @@ sub read_config
 	if (defined $options->{decrypt})
 	{
 		$config{decrypt}=$options->{decrypt};
+	}
+	if (defined $config{log_file} and $config{log_file} =~ /./)
+	{
+		open my $log, ">", "$config{log_file}" or 
+		die "Can't open $config{log_file}";
 	}
 	return %config;
 }
@@ -207,10 +223,8 @@ sub as_root
 	my $so=linux_or_solaris($host,$root);
 	my $cmd;
 
-	my $fecha=strftime "%Y%m%d - %H:%M:%S", localtime;
-	open LOG, ">>$log_file";
-	print LOG "$fecha - as_root $host, $root, \"$command\" LAUNCHED\n";
-	close LOG;
+	info ("as_root $host, $root, \"$command\" LAUNCHED\n");
+
 	if ( $command_script eq 1 )
 	{
 		my $script=basename($command);
@@ -316,10 +330,7 @@ EOC
 		$su->interact();
 	}
 	$su->soft_close();
-	$fecha=strftime "%Y%d%m - %H:%M:%S", localtime;
-	open LOG, ">>$log_file";
-	print LOG "$fecha - as_root $host, $root, \"$command\" FINISHED\n";
-	close LOG;
+	info ("as_root $host, $root, \"$command\" FINISHED\n");
 }
 
 
@@ -340,7 +351,7 @@ my $result = GetOptions (
 pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
 my $command;
 
-my %config=read_config ( { file_config=>$file_config,
+%config=read_config ( { file_config=>$file_config,
 			passwords_file => $passwords_file,
 			user => $root,
 			decrypt => $decrypt});
@@ -440,7 +451,7 @@ If your password file is not encrypted, use this option
 Use '#' to comment, and simple "directive=value". Directives supported are
 (defaults between '['):
 
-log_file [/var/log/as_root.log] 
+log_file [/var/log/as_root.log], use log_file= for not having logs
 
 passwords_file [/etc/as_root/passwords.xml]
 
