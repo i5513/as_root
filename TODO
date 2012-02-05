@@ -4,5 +4,5 @@ Without any order:
 - Support various passwords file sources
 - Fixing logging
 - add debian directory, so we can have a debian package
-- Explicity detect if cpan modules used are installed
+- Explicitily detect if cpan modules used are installed
 - Create test to check nothing is broken when update the script

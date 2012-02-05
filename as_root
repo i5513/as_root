@@ -5,6 +5,7 @@ use utf8;
 use Expect;
 use File::Basename;
 use Getopt::Long;
+use Pod::Usage;
 use POSIX qw(strftime);
 use Data::Dumper;
 use XML::LibXML;
@@ -327,13 +328,16 @@ Getopt::Long::Configure ("bundling");
 my $file_config;
 my $file_script;
 my $root;
+my $help=0;
 my $result = GetOptions (
+		"help|h" => \$help,
 		"config|c" => \$file_config,
         "file|f=s" => \$file_script,
         "passwordfile|p=s" => \$passwords_file,
 	"user|u=s" => \$root,
 	"decrypted|d" => \$decrypt
         );
+pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
 my $command;
 
 my %config=read_config ( { file_config=>$file_config,
@@ -343,13 +347,13 @@ my %config=read_config ( { file_config=>$file_config,
 
 if ( $#ARGV lt 0 )
 {
-	die "I need a host as argument";
+	pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]});
+	#die "I need a host as argument";
 }
 
 my $host= $ARGV[0];
 my $password=get_password($host,\%config);
 
-# Para los sistemas que necesitan saltos, usamos ssh
 # There are system which need hops (configured with ProxyCommands), so nc is
 # not a option here
 # my $nc=system ("nc -z -w 2 $host 22 &> /dev/null");
@@ -375,3 +379,83 @@ else
 
 as_root ($host, $config{user}, $password, 
 		$command,$config{log_file});
+
+__END__
+
+=head1 NAME
+
+as_root - Execute remote commands with root user
+
+=head1 SYPNOSIS
+
+B<as_root> [OPTION] host [command]
+
+=head1 DESCRIPTION
+
+as_root is a perl script which do basically:
+
+$ ssh host ' su - ' 
+
+or
+
+$ ssh host ' su - command' 
+#
+
+It assumes:
+
+	- You use key public infraestructure to login your host, probabbly
+using ssh-agent for keep your passphrase.
+
+	- You have a file with your root passwords
+
+	- You know sudo is the solution ... but your partners/boss not ... and you are
+	  not allowed to install sudo in all your hosts
+
+=head1 OPTIONS
+
+=head2 B<--config|-c file>
+
+Use file as file config. By default it searched at ~/.as_root/config and
+/etc/as_root/config in that order.
+
+=head2 B<--passwordfile|-p file>
+
+Use file as password file. For the moment only xml keepass v2 format is
+supported
+
+=head2 B<--file|-f script> 
+
+Copy script in remote host and exec it
+
+=head2 B<--user|-u remote_user >
+
+Your remote user login name
+
+=head2 B<--decrypted|-d>
+
+If your password file is not encrypted, use this option
+
+=head1 CONFIGURATION FILE
+
+Use '#' to comment, and simple "directive=value". Directives supported are
+(defaults between '['):
+
+log_file [/var/log/as_root.log] 
+
+passwords_file [/etc/as_root/passwords.xml]
+
+default_password [password]
+
+decrypt [0]
+
+user [local username]
+
+Meaning are obvious
+
+=head1 LICENSE
+
+WTFPL
+
+=head1 AUTHOR
+
+Javier Barroso <javibarroso@gmail.com>
