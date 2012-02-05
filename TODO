@@ -1,7 +1,6 @@
 Without any order:
 
 - Write manpage which substitute README, add --help
-- Translate all the code to english
 - Support various passwords file sources
 - Fixing logging
 - add debian directory, so we can have a debian package
