@@ -240,13 +240,15 @@ sub as_root
 su - root -c \\\"
 mv /export/home/$root/as_root/$script /usr/local/bin/
 chmod +x /usr/local/bin/$script 
-/usr/local/bin/$script \\\"
+/usr/local/bin/$script 
+rm -f /usr/local/bin/$script\\\"
 EOC
 		}
 		elsif ($so eq "linux")
 		{
 			$cmd = <<"EOC";
-su -c 'mv /home/$root/as_root/$script /usr/local/bin
+su -c '
+mv \$HOME/as_root/$script /usr/local/bin
 chmod +x /usr/local/bin/$script
 /usr/local/bin/$script
 rm -f /usr/local/bin/$script' - root
@@ -301,13 +303,9 @@ EOC
 	{
 		# "Contraseña:" vs "Password: " ...
 		$su->expect (10,
-		[ qr/Passw.*/ => sub { my $exp=shift;
-			$exp->send("$password"."\n");
-			exp_continue;
-			}]  ,
-		[ qr/Contr.*/ => sub { my $exp=shift;
-			$exp->send("$password"."\n");
-			$exp->log_user(1);
+		[ qr/Contr.*|Passw.*/ => sub {
+			my $exp=shift;
+			$exp->send("$password\n");
 			exp_continue;
 			}],
 		[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1); } ] 
@@ -316,7 +314,8 @@ EOC
 	elsif ($so eq "solaris")
 	{
 		$su->expect (10,
-		[ qr/Contr.*|Passw.*/ => sub { my $exp=shift;
+		[ qr/Contr.*|Passw.*/ => sub {
+			my $exp=shift;
 			$exp->send("$password"."\n");
 			$pass=1;
 			exp_continue;
