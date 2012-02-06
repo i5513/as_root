@@ -78,17 +78,9 @@ sub read_config
 		}
 	}
 	# Command line options ..
-	if (defined $options->{passwords_file})
+	foreach my $opt (grep { defined $options->{$_} }keys %$options)
 	{
-		$config{passwords_file}=$options->{passwords_file};
-	}
-	if (defined $options->{root})
-	{
-		$config{user}=$options->{root};
-	}
-	if (defined $options->{decrypt})
-	{
-		$config{decrypt}=$options->{decrypt};
+		$config{$opt}=$options->{$opt};
 	}
 	if (defined $config{log_file} and $config{log_file} =~ /./)
 	{
@@ -97,14 +89,6 @@ sub read_config
 	}
 	return %config;
 }
-
-
-my $decrypt;
-my $passwords_file;
-my $log_file;
-my $default_password="password";
-my $command_script=0;
-
 
 sub get_password
 {
@@ -153,7 +137,7 @@ sub get_password
 
 	if (not defined ($password))
 	{
-		$password=$default_password;
+		$password=$config{default_password};
 	}
 	if ( not defined $config->{decrypt} and $dontdelete ne 1 )
 	{
@@ -205,6 +189,10 @@ sub linux_or_solaris
 	{
 		return "linux";
 	}
+	elsif ($res eq 255)
+	{
+		die "I can not login to $host as $root"
+	}
 	else
 	{
 		die "I didn't find OS from $host. Maybe I did not login. Dying ...";
@@ -214,19 +202,20 @@ sub linux_or_solaris
 sub as_root
 {
 	my $host=shift;
-	my $root=shift;
-	my $password=shift;
 	my $command=shift;
-	my $log_file=shift;
-	my $su;
+	my $config=shift;
+	my $password=get_password ($host,$config);
 	my $pass=0;
+	my $root = $config->{user};
 	my $so=linux_or_solaris($host,$root);
 	my $cmd;
+	
 
 	info ("as_root $host, $root, \"$command\" LAUNCHED\n");
 
-	if ( $command_script eq 1 )
+	if ( defined $config->{file_script} )
 	{
+		my $command=$config->{file_script};
 		my $script=basename($command);
 		my $res=system("scp -q $command $root\@$host:as_root/$script");
 		# $res ne 0 ...
@@ -238,7 +227,7 @@ sub as_root
 		{
 			$cmd = <<"EOC";
 su - root -c \\\"
-mv /export/home/$root/as_root/$script /usr/local/bin/
+mv \$HOME/as_root/$script /usr/local/bin/
 chmod +x /usr/local/bin/$script 
 /usr/local/bin/$script 
 rm -f /usr/local/bin/$script\\\"
@@ -280,6 +269,7 @@ EOC
 su - root
 EOC
 	}
+	my $su;
 	$su=new Expect;
 	if ( -t STDIN )
 	{
@@ -335,50 +325,48 @@ EOC
 
 Getopt::Long::Configure ("bundling");
 
-my $file_config;
-my $file_script;
-my $root;
+my ($file_config,$file_script,$root,$decrypt,$passwords_file,$log_file);
 my $help=0;
+my $default_password="password";
+
 my $result = GetOptions (
 		"help|h" => \$help,
 		"config|c" => \$file_config,
-        "file|f=s" => \$file_script,
-        "passwordfile|p=s" => \$passwords_file,
-	"user|u=s" => \$root,
-	"decrypted|d" => \$decrypt
+        "file_script|f=s" => \$file_script,
+        "passwords_file|p=s" => \$passwords_file,
+		"default_password|P=s" => \$default_password,
+		"user|u=s" => \$root,
+		"decrypted|d" => \$decrypt
         );
 pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
-my $command;
 
-%config=read_config ( { file_config=>$file_config,
+%config=read_config ( { 
+			file_config=>$file_config,
 			passwords_file => $passwords_file,
+			file_script => $file_script,
+			default_password => $default_password,
 			user => $root,
-			decrypt => $decrypt});
+			decrypt => $decrypt
+			});
 
 if ( $#ARGV lt 0 )
 {
 	pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]});
-	#die "I need a host as argument";
 }
 
 my $host= $ARGV[0];
-my $password=get_password($host,\%config);
 
 # There are system which need hops (configured with ProxyCommands), so nc is
 # not a option here
 # my $nc=system ("nc -z -w 2 $host 22 &> /dev/null");
-my $nc=system ("ssh -l $config{user} $host true &> /dev/null");
-if ($nc ne 0)
-{
-	die "I cannot login into \"$host\"\n";
-}
+#my $nc=system ("ssh -l $config{user} $host true &> /dev/null");
+#if ($nc ne 0)
+#{
+#	die "I cannot login into \"$host\"\n";
+#}
 
-if (defined $file_script)
-{
-	$command=$file_script;
-	$command_script=1;
-}
-elsif (defined $ARGV[1])
+my $command;
+if (defined $ARGV[1])
 {
 	$command="$ARGV[1]";
 }
@@ -387,8 +375,7 @@ else
 	$command="";
 }
 
-as_root ($host, $config{user}, $password, 
-		$command,$config{log_file});
+as_root ($host, $command,\%config);
 
 __END__
 
@@ -428,12 +415,15 @@ using ssh-agent for keep your passphrase.
 Use file as file config. By default it searched at ~/.as_root/config and
 /etc/as_root/config in that order.
 
-=head2 B<--passwordfile|-p file>
+=head2 B<--passwords_file|-p file>
 
 Use file as password file. For the moment only xml keepass v2 format is
 supported
 
-=head2 B<--file|-f script> 
+=head2 B<--default_password|-P mypassword>
+Use mypassword as default password
+
+=head2 B<--file_script|-f script> 
 
 Copy script in remote host and exec it
 
