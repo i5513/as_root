@@ -137,7 +137,7 @@ sub get_password
 
 	if (not defined ($password))
 	{
-		$password=$config{default_password};
+		$password=$config->{default_password};
 	}
 	if ( not defined $config->{decrypt} and $dontdelete ne 1 )
 	{
