@@ -129,19 +129,33 @@ sub get_password
 
 	$config->{passwords_file}=$pass_file_decrypt;
 
+	my @domains=();
+	my $domains_xml;
+	if (defined ($config->{domains}))
+	{
+		$config->{domains}=~s/\s*//g;	
+		@domains=(split (",",$config->{domains}));
+		$domains_xml=join (" or ", "Value='$host'", map { "Value='$host.$_'" } @domains);
+	}
+	else
+	{
+		$domains_xml="Value='$host'";
+	}
+
 	my $xml = XML::LibXML->load_xml(location => $config->{passwords_file});
 	my $xc = XML::LibXML::XPathContext->new($xml);
 	# keepass xml v2
 	$password = $xc -> findvalue ("//Group/Entry/String".
 		"[Key='UserName'][Value='root']".
-		"/../String[Key='Title'][Value='$host']".
+		"/../String[Key='Title'][$domains_xml]".
 		"/../String[Key='Password']/Value");
 
 	if (not defined ($password) or $password !~ /./)
 	{
 		# keepass xml v1
+		$domains_xml =~ s/Value/title/g;
 		$password = $xc -> findvalue ("/database/group/".
-			"entry[title='$host'][username='root']/password");
+			"entry[$domains_xml][username='root']/password");
 		if (not defined ($password))
 		{
 			$password=$config->{default_password};
@@ -443,6 +457,7 @@ Your remote user login name
 
 If your password file is not encrypted, use this option
 
+
 =head1 CONFIGURATION FILE
 
 Use '#' to comment, and simple "directive=value". Directives supported are
@@ -457,6 +472,8 @@ default_password [password]
 decrypted [0]
 
 user [local username]
+
+domains [domains separated by commas]
 
 Meaning are obvious
 
