@@ -10,7 +10,8 @@ use POSIX qw(strftime);
 use Data::Dumper;
 use XML::LibXML;
 
-my @directives=qw(log_file passwords_file default_password decrypt user);
+my @directives=qw(log_file passwords_file default_password 
+	decrypted user domains);
 my %directives;
 $directives{$_}=1 foreach @directives;
 my %config;
@@ -41,7 +42,7 @@ sub read_config
 	my %config=(log_file => "/var/log/as_root.log", 
 		passwords_file => "/etc/as_root/passwords.xml",
 		user => get_login,
-		decrypt=>0
+		decrypted=>0
 		);
 	my $file_config=$options->{file_config};
 
@@ -96,14 +97,14 @@ sub get_password
     my ($host,$config)=@_;
 	my $dontdelete=0;
 
-    my $pass_file_decrypt="/tmp/passwords-insecure-$config->{user}.xml";
+    my $pass_file_decrypt="/tmp/passwords.insecure.$config->{user}.xml";
 	if ( not -e $pass_file_decrypt)
 	{
 		if ( not -e $config->{passwords_file} )
 		{
 			die "I can't open $config->{passwords_file}";
 		}
-		if ( not defined $config->{decrypt} )
+		if ( not defined $config->{decrypted} or $config->{decrypted} eq 0)
 		{
 			my $desencriptado=system ("openssl des3 -salt -d ".
 				"-in $config->{passwords_file} ".
@@ -130,16 +131,23 @@ sub get_password
 
 	my $xml = XML::LibXML->load_xml(location => $config->{passwords_file});
 	my $xc = XML::LibXML::XPathContext->new($xml);
+	# keepass xml v2
 	$password = $xc -> findvalue ("//Group/Entry/String".
 		"[Key='UserName'][Value='root']".
 		"/../String[Key='Title'][Value='$host']".
 		"/../String[Key='Password']/Value");
 
-	if (not defined ($password))
+	if (not defined ($password) or $password !~ /./)
 	{
-		$password=$config->{default_password};
+		# keepass xml v1
+		$password = $xc -> findvalue ("/database/group/".
+			"entry[title='$host'][username='root']/password");
+		if (not defined ($password))
+		{
+			$password=$config->{default_password};
+		}
 	}
-	if ( not defined $config->{decrypt} and $dontdelete ne 1 )
+	if ( (not defined $config->{decrypted} or $config->{decrypted} eq 0) and $dontdelete ne 1 )
 	{
 		system ("rm -f $pass_file_decrypt");
 		if ($? ne 0)
@@ -325,7 +333,7 @@ EOC
 
 Getopt::Long::Configure ("bundling");
 
-my ($file_config,$file_script,$root,$decrypt,$passwords_file,$log_file);
+my ($file_config,$file_script,$root,$decrypted,$passwords_file,$log_file);
 my $help=0;
 my $default_password="password";
 
@@ -336,7 +344,7 @@ my $result = GetOptions (
         "passwords_file|p=s" => \$passwords_file,
 		"default_password|P=s" => \$default_password,
 		"user|u=s" => \$root,
-		"decrypted|d" => \$decrypt
+		"decrypted|d" => \$decrypted
         );
 pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
 
@@ -346,7 +354,7 @@ pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
 			file_script => $file_script,
 			default_password => $default_password,
 			user => $root,
-			decrypt => $decrypt
+			decrypted => $decrypted
 			});
 
 if ( $#ARGV lt 0 )
@@ -446,7 +454,7 @@ passwords_file [/etc/as_root/passwords.xml]
 
 default_password [password]
 
-decrypt [0]
+decrypted [0]
 
 user [local username]
 

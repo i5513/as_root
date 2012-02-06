@@ -1,6 +1,6 @@
 Without any order:
 
-- Support various passwords file sources
+- Support simple password file (host=password style)
 - add debian directory, so we can have a debian package
 - Explicitily detect if cpan modules used are installed
 - Create test to check nothing is broken when update the script
