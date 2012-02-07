@@ -26,8 +26,10 @@ log_file
 user
 decrypt
 passwords_file
+passwords_command
 default_password
+domains
 
 I'm playing with git, so I expect to have errors ...
 
-Well, to be improved !
+Well, to be improved , read the perldoc/man for more info!
