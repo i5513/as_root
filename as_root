@@ -1,6 +1,17 @@
 #!/usr/bin/perl 
 use strict;
 use warnings;
+
+my @modules_failed;
+
+foreach my $module (qw(utf8 Expect File::Basename Getopt::Long
+	Pod::Usage POSIX Data::Dumper XML::LibXML))
+{
+	eval "use $module";
+	if ($@) {push @modules_failed,$module;}
+}
+die "Please install @modules_failed, I couldn't load them" 
+if @modules_failed > 0;
 use utf8;
 use Expect;
 use File::Basename;
