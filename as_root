@@ -10,8 +10,8 @@ use POSIX qw(strftime);
 use Data::Dumper;
 use XML::LibXML;
 
-my @directives=qw(log_file passwords_file default_password 
-	decrypted user domains);
+my @directives=qw(log_file passwords_file default_password
+	passwords_command decrypted user domains);
 my %directives;
 $directives{$_}=1 foreach @directives;
 my %config;
@@ -96,6 +96,19 @@ sub get_password
     my $password;
     my ($host,$config)=@_;
 	my $dontdelete=0;
+
+	if (defined $config->{passwords_command})
+	{
+		$password=`$config->{passwords_command} $host` or 
+		die "$config->{passwords_command} $host failed";
+		chomp $password;
+
+		if (not defined ($password) or $password !~ /./)
+		{
+			$password=$config->{default_password};
+		}
+		return $password;
+	}
 
     my $pass_file_decrypt="/tmp/passwords.insecure.$config->{user}.xml";
 	if ( not -e $pass_file_decrypt)
@@ -471,9 +484,12 @@ default_password [password]
 
 decrypted [0]
 
-user [local username]
+user [remote username]
 
 domains [domains separated by commas]
+
+passwords_command [ host will be passed as first argument, it has to return
+the password ]
 
 Meaning are obvious
 
