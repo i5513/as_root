@@ -2,8 +2,8 @@
 use strict;
 use warnings;
 
+# Check that modules are installed
 my @modules_failed;
-
 foreach my $module (qw(utf8 Expect File::Basename Getopt::Long
 	Pod::Usage POSIX Data::Dumper XML::LibXML))
 {
@@ -12,6 +12,8 @@ foreach my $module (qw(utf8 Expect File::Basename Getopt::Long
 }
 die "Please install @modules_failed, I couldn't load them" 
 if @modules_failed > 0;
+
+# Load modules
 use utf8;
 use Expect;
 use File::Basename;
@@ -25,7 +27,7 @@ my @directives=qw(log_file passwords_file default_password
 	passwords_command decrypted user domains);
 my %directives;
 $directives{$_}=1 foreach @directives;
-my %config;
+my %config; # global only for $config{log_file} inside info for the moment
 
 sub info
 {
@@ -317,10 +319,7 @@ EOC
 	}
 	my $su;
 	$su=new Expect;
-	if ( -t STDIN )
-	{
-		$su->slave->clone_winsize_from(\*STDIN);
-	}
+	$su->slave->clone_winsize_from(\*STDIN) if -t STDIN;
 	$su->spawn ("ssh -q  -t $root\@$host \"$cmd\"") or 
 		die "I cannot exec the command";
 #	$SIG{WINCH} = \&winch;
@@ -335,35 +334,17 @@ EOC
 	$su->log_user(0);
 	# $su->log_file ("/tmp/as_root");
 	# $su->expect (undef);
-	if ($so eq "linux")
-	{
-		# "Contraseña:" vs "Password: " ...
-		$su->expect (10,
-		[ qr/Contr.*|Passw.*/ => sub {
-			my $exp=shift;
-			$exp->send("$password\n");
-			exp_continue;
-			}],
-		[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1); } ] 
-		);
-	}
-	elsif ($so eq "solaris")
-	{
-		$su->expect (10,
-		[ qr/Contr.*|Passw.*/ => sub {
-			my $exp=shift;
-			$exp->send("$password"."\n");
-			$pass=1;
-			exp_continue;
-			}]  ,
-		[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1) if ($pass == 1); } ] 
-	#	[ qr/SunOS/ => sub { my $exp=shift; $exp->log_user(1); } ] 
-		);
-	}
-	if ($command =~ /^$/)
-	{
-		$su->interact();
-	}
+	$su->expect (10,
+	[ qr/Contr.*|Passw.*/ => sub {
+		my $exp=shift;
+		$exp->send("$password"."\n");
+		$pass=1;
+		exp_continue;
+		}]  ,
+	[ qr/^.$/ => sub { my $exp=shift; $exp->log_user(1) if ($pass == 1); } ] 
+#	[ qr/SunOS/ => sub { my $exp=shift; $exp->log_user(1); } ] 
+	);
+	$su->interact() if ($command =~ /^$/);
 	$su->soft_close();
 	info ("as_root $host, $root, \"$command\" FINISHED\n");
 }
