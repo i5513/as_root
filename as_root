@@ -24,7 +24,7 @@ use Data::Dumper;
 use XML::LibXML;
 
 my @directives=qw(log_file passwords_file default_password
-	passwords_command decrypted user domains);
+	passwords_command decrypted user domains cache_file);
 my %directives;
 $directives{$_}=1 foreach @directives;
 my %config; # global only for $config{log_file} inside info for the moment
@@ -100,6 +100,11 @@ sub read_config
 	{
 		open my $log, ">", "$config{log_file}" or 
 		die "Can't open $config{log_file}";
+	}
+	if (defined $config{cache_file} and $config{cache_file} =~ /./)
+	{
+		open my $log, ">>", "$config{cache_file}" or 
+		die "Can't open $config{cache_file}";
 	}
 	return %config;
 }
@@ -202,10 +207,21 @@ sub linux_or_solaris
 {
 	my $host=shift;
 	my $root=shift;
+	my $cache_file=shift;
 	my $res=0;
 	my $linux=0;
 	my $solaris=0;
-	
+
+	if (defined ($cache_file) and -e $cache_file)
+	{
+		open my $cache, "$cache_file";
+		while (<$cache>)
+		{
+			chomp;
+			return "linux" if ($_ eq "$host linux");
+			return "solaris" if ($_ eq "$host solaris");
+		}
+	}
 	$res=system("ssh -l $root $host '
 	if ! [ -d /usr/local/bin ]; 
 	then 
@@ -222,7 +238,6 @@ sub linux_or_solaris
 		exit 3;
 	fi
 	'");
-	# estos numeros los he tenido que mirar a mano ... no se como ira en el mismo linux
 
 	$res=$res >> 8;	
 	if ($res eq 4)
@@ -231,10 +246,21 @@ sub linux_or_solaris
 	}
 	if ($res eq 3)
 	{
+		if (defined ($cache_file) and -w $cache_file)
+		{
+			open my $cache, ">>$cache_file";
+			print $cache "$host solaris\n";
+		}
 		return "solaris";
 	}
 	elsif ($res eq 2)
 	{
+		if (defined ($cache_file) and 
+			(-w $cache_file or -w dirname($cache_file)))
+		{
+			open my $cache, ">>$cache_file";
+			print $cache "$host linux\n";
+		}
 		return "linux";
 	}
 	elsif ($res eq 255)
@@ -255,7 +281,7 @@ sub as_root
 	my $password=get_password ($host,$config);
 	my $pass=0;
 	my $root = $config->{user};
-	my $so=linux_or_solaris($host,$root);
+	my $so=linux_or_solaris($host,$root,$config->{cache_file});
 	my $cmd;
 	
 
@@ -482,6 +508,8 @@ domains [domains separated by commas]
 
 passwords_command [ host will be passed as first argument, it has to return
 the password ]
+
+cache_file [ for the moment only to know if host is linux or solaris ]
 
 Meaning are obvious
 

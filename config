@@ -6,3 +6,4 @@ default_password=test
 log_file=/home/youruser/logs/as_root.log
 #domains=your.domain.org,your.other.domain.org
 #passwords_command=/home/youruser/bin/getpassword
+cache_file=/home/youruser/.asroot/cache
