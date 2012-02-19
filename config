@@ -1,9 +1,9 @@
 # Config of as_root
-user=youruser
-passwords_file=/home/youruser/private/passwords.xml
-decrypted=1
-default_password=test
-log_file=/home/youruser/logs/as_root.log
+#user=youruser
+#passwords_file=/home/youruser/private/passwords.xml
+#decrypted=1
+#default_password=test
+#log_file=/home/youruser/logs/as_root.log
 #domains=your.domain.org,your.other.domain.org
 #passwords_command=/home/youruser/bin/getpassword
-cache_file=/home/youruser/.asroot/cache
+cache_file=/var/cache/as_root/cache
