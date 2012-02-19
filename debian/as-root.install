@@ -1,0 +1,2 @@
+as_root /usr/bin
+config /etc/as_root

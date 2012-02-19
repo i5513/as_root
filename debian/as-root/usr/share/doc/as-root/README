@@ -1,0 +1,35 @@
+as_root is a perl script which help you if in your departament don't want to
+use sudo.
+
+It basically use expect to automatically login as root in server though ssh:
+
+ssh machine "su -"
+password: xxxx
+# 
+
+You need a password file exported to xml from keepass v2. Actually you need
+encrypt it:
+
+openssl des3 -salt -e -in passwords.xml -out passwords-encrypted.xml
+
+or configuring -d (decrypt option) when using as_root.
+
+as_root will read in this order:
+
+-c file_config
+~/.as_root/config
+/etc/as_root/config
+
+Directives supported are:
+
+log_file
+user
+decrypt
+passwords_file
+passwords_command
+default_password
+domains
+
+I'm playing with git, so I expect to have errors ...
+
+Well, to be improved , read the perldoc/man for more info!

@@ -1,0 +1,5 @@
+as-root (0.8-1) unstable; urgency=low
+
+  * Initial Debian package release
+
+ -- i5513 <Javier Barroso <javibarroso@gmail.com>>  Sun, 19 Feb 2012 12:09:27 +0100

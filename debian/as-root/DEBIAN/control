@@ -1,0 +1,12 @@
+Package: as-root
+Version: 0.8-1
+Architecture: amd64
+Maintainer: i5513 <Javier Barroso <javibarroso@gmail.com>>
+Installed-Size: 60
+Section: admin
+Priority: extra
+Homepage: https://github.com/i5513/as_root
+Description: Execute remotely command as root without sudo
+ Really you don't want or don't can't use sudo ? Really?
+ as_root will automatically for you do ssh machine "su -" and though expect
+ will introduce root password

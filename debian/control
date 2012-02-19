@@ -1,0 +1,17 @@
+Source: as-root
+Section: admin
+Priority: extra
+Maintainer: i5513 <Javier Barroso <javibarroso@gmail.com>>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.2
+Homepage: https://github.com/i5513/as_root
+Vcs-Git: git://github.com/i5513/as_root.git
+Vcs-Browser: https://github.com/i5513/as_root
+
+Package: as-root
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Execute remotely command as root without sudo
+ Really you don't want or don't can't use sudo ? Really?
+ as_root will automatically for you do ssh machine "su -" and though expect
+ will introduce root password 

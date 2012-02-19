@@ -1,0 +1,4 @@
+Without any order:
+
+- add debian directory, so we can have a debian package
+- Create test to check nothing is broken when update the script
