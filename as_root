@@ -187,7 +187,7 @@ sub get_password
 		$domains_xml =~ s/Value/title/g;
 		$password = $xc -> findvalue ("/database/group/".
 			"entry[$domains_xml][username='root']/password");
-		if (not defined ($password))
+		if (not defined ($password) or $password !~ /./)
 		{
 			$password=$config->{default_password};
 		}
@@ -311,7 +311,7 @@ EOC
 		{
 			$cmd = <<"EOC";
 su -c '
-mv \$HOME/as_root/$script /usr/local/bin
+mv /home/$root/as_root/$script /usr/local/bin
 chmod +x /usr/local/bin/$script
 /usr/local/bin/$script
 rm -f /usr/local/bin/$script' - root
@@ -348,14 +348,16 @@ EOC
 	$su->slave->clone_winsize_from(\*STDIN) if -t STDIN;
 	$su->spawn ("ssh -q  -t $root\@$host \"$cmd\"") or 
 		die "I cannot exec the command";
+
+	$SIG{WINCH} = sub { $su->slave->clone_winsize_from(\*STDIN); kill WINCH => $su->pid if $su->pid; };
 #	$SIG{WINCH} = \&winch;
   
 #	sub winch {
-#    	$su->slave->clone_winsize_from(\*STDIN);
+#	no warnings;	
+#   	$su->slave->clone_winsize_from(\*STDIN);
 #   	 kill WINCH => $su->pid if $su->pid;
 #    	$SIG{WINCH} = \&winch;
 #  	}
-
 
 	$su->log_user(0);
 	# $su->log_file ("/tmp/as_root");
@@ -380,7 +382,8 @@ Getopt::Long::Configure ("bundling");
 
 my ($file_config,$file_script,$root,$decrypted,$passwords_file,$log_file);
 my $help=0;
-my $default_password="password";
+#my $default_password="password";
+my $default_password;
 
 my $result = GetOptions (
 		"help|h" => \$help,
@@ -401,7 +404,6 @@ pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]}) if $help;
 			user => $root,
 			decrypted => $decrypted
 			});
-
 if ( $#ARGV lt 0 )
 {
 	pod2usage({ -verbose => 99, -sections => [qw (SYPNOSIS OPTIONS)]});
